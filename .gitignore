@@ -1,0 +1,179 @@
+# .NET Core build artifacts
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+
+# Installer output
+Installer/Output/
+
+# .NET Core
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Visual Studio
+.vs/
+*.sln.docstates
+*.user
+*.userprefs
+*.rsuser
+*.suo
+*.sln
+
+# Rider
+.idea/
+*.sln.iml
+
+# Visual Studio Code
+.vscode/
+.vscode-server/
+*.code-workspace
+
+# Dependencies
+/packages/
+*.nuget.targets
+*.nuget.props
+
+# Windows
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+Thumbs.db:encryptable
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+
+# Build artifacts
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.iobj
+*.ipdb
+*.cache
+*.tlog
+*.lastbuildstate
+
+# NuGet
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*.swn
+*~
+
+# Visual Studio cache files
+*.aps
+*.ncb
+*.opendb
+*.VC.db
+*.VC.VC.opendb
+
+# WiX Toolset
+*.wixobj
+*.wixpdb
+*.msi
+*.msm
+*.msp
+*.cab
+
+# Logs
+*.log
+app_output.log
+
+# Windows Installer
+*.msi
+*.msm
+*.msp
+*.cab
+*.wixout
+
+# OS-specific
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# JetBrains
+.idea/
+*.iml
+
+# Local history plugin
+.history/
+
+# Build scripts
+Build.ps1
+build.ps1
+*.Build.cs
+
+# Azure Functions
+local.settings.json
+
+# ASP.NET Scaffolding
+ScaffoldingReadMe.txt
+
+# Entity Framework
+*.dbmdl
+*.jfm
+*.dbml
+
+# LightSwitch
+*.lsproj
+
+# Publish profiles
+*.pubxml
+*.pubxml.user
+*.azurePubxml
+
+# SQL Server files
+*.mdf
+*.ldf
+*.ndf
+
+# Business Intelligence projects
+*.rdl.data
+*.bim.layout
+*.bim_*.settings
+*.rptproj.rsuser
+
+# Windows Phone
+AppPackages/
+
+# Xamarin
+*.userprefs
+
+# Backup files
+*.bak
+*.backup
+*~
