@@ -197,7 +197,7 @@ namespace MinimalWindowsApp.Managers
                 }
                 else
                 {
-                    Logger.Warning($"VirtualMidiPort.Close() called but _midiPort was null for '{_portName}'");
+                    Logger.LogDebug($"VirtualMidiPort.Close() - port already closed for '{_portName}'");
                 }
             }
             catch (TeVirtualMIDIException ex)

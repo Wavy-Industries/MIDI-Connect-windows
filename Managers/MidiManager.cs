@@ -77,6 +77,12 @@ namespace MinimalWindowsApp.Managers
             return port;
         }
         
+        public BluetoothDeviceInfo? GetDeviceInfo(ulong bluetoothAddress)
+        {
+            // Get from BluetoothManager's discovered devices
+            return BluetoothManager.Instance.GetDeviceInfo(bluetoothAddress);
+        }
+        
         public async Task<IMidiOutPort> CreateVirtualMidiPort(string deviceName, ulong bluetoothAddress)
         {
             try
@@ -176,10 +182,10 @@ namespace MinimalWindowsApp.Managers
                  _virtualMidiPorts.Remove(bluetoothAddress);
                  Logger.Info($"Successfully removed virtual MIDI port for device {bluetoothAddress:X}");
              }
-             else
-             {
-                 Logger.Warning($"No virtual MIDI port found for device {bluetoothAddress:X}");
-             }
+            else
+            {
+                Logger.LogDebug($"No virtual MIDI port found for device {bluetoothAddress:X} (may have been cleaned up already)");
+            }
          }
         
          public IMidiOutPort? GetVirtualMidiPort(ulong bluetoothAddress)
@@ -218,7 +224,7 @@ namespace MinimalWindowsApp.Managers
             }
             else
             {
-                Logger.Warning($"No MIDI port found for {deviceId}");
+                Logger.LogDebug($"No MIDI port found for {deviceId} (may have been cleaned up already)");
             }
         }
         
@@ -334,6 +340,10 @@ namespace MinimalWindowsApp.Managers
                       {
                           var virtualPort = MidiManager.Instance.GetTeVirtualMidiPort(deviceId.Value);
                           virtualPort?.SendData(parsedData);
+                          
+                          // Signal incoming traffic
+                          var deviceInfo = MidiManager.Instance.GetDeviceInfo(deviceId.Value);
+                          deviceInfo?.SetTraffic(isIncoming: true);
                       }
                   }
               }

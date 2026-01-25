@@ -10,56 +10,137 @@ namespace MinimalWindowsApp.Managers
 {
     public class DeviceSession : IDisposable
     {
-        public string Id => Device?.DeviceId ?? "unknown";
-        public BluetoothLEDevice Device { get; private set; }
-        public string Name => Device?.Name ?? "Unknown";
-        public ulong BluetoothAddress => Device?.BluetoothAddress ?? 0;
+        private readonly ulong _bluetoothAddress;
+        private readonly string _deviceName;
+        
+        public string Id => Device?.DeviceId ?? $"ble_{_bluetoothAddress:X}";
+        public BluetoothLEDevice? Device { get; private set; }
+        public string Name => Device?.Name ?? _deviceName;
+        public ulong BluetoothAddress => _bluetoothAddress;
         public bool IsDisposed { get; private set; }
         
         public bool IsConnected { get; set; }
         public bool IsConnecting { get; set; }
         
-         public GattCharacteristic? MidiCharacteristic { get; set; }
+        public GattCharacteristic? MidiCharacteristic { get; set; }
          
-         private VirtualMidiPort? _midiPort;
-         private MidiPort? _midiGattPort;
-         private DateTime _connectionTimestamp;
-         private DateTime _disconnectionTimestamp;
-         private readonly object _cleanupLock = new object();
+        private VirtualMidiPort? _midiPort;
+        private MidiPort? _midiGattPort;
+        private DateTime _connectionTimestamp;
+        private DateTime _disconnectionTimestamp;
+        private readonly object _cleanupLock = new object();
         
         public DateTime ConnectionTimestamp => _connectionTimestamp;
         public DateTime DisconnectionTimestamp => _disconnectionTimestamp;
         
-         public DeviceSession(BluetoothLEDevice device)
-         {
-             Device = device;
-             IsConnected = false;
-             IsConnecting = false;
-             IsDisposed = false;
-             _connectionTimestamp = DateTime.MinValue;
-             _disconnectionTimestamp = DateTime.MinValue;
+        public event Action<ulong>? Disconnected;
+        
+        public DeviceSession(BluetoothLEDevice device)
+        {
+            Device = device;
+            _bluetoothAddress = device.BluetoothAddress;
+            _deviceName = device.Name ?? "Unknown";
+            IsConnected = false;
+            IsConnecting = false;
+            IsDisposed = false;
+            _connectionTimestamp = DateTime.MinValue;
+            _disconnectionTimestamp = DateTime.MinValue;
              
-             Logger.Info($"Setting up ConnectionStatusChanged handler for {device.Name}");
-             Device.ConnectionStatusChanged += OnConnectionStatusChanged;
-             Logger.LogDebug($"ConnectionStatusChanged handler attached to {device.Name}");
-         }
+            Logger.Info($"Setting up ConnectionStatusChanged handler for {_deviceName}");
+            Device.ConnectionStatusChanged += OnConnectionStatusChanged;
+            Logger.LogDebug($"ConnectionStatusChanged handler attached to {_deviceName}");
+        }
         
         private async void OnConnectionStatusChanged(BluetoothLEDevice sender, object args)
         {
-            Logger.Info($"Connection status changed for {sender.Name}: {sender.ConnectionStatus}");
-            if (sender.ConnectionStatus == BluetoothConnectionStatus.Connected)
+            try
             {
-                IsConnected = true;
-                IsConnecting = false;
-                _connectionTimestamp = DateTime.Now;
-                Logger.Info($"Device {sender.Name} connected at {_connectionTimestamp}");
+                Logger.Info($"Connection status changed for {sender.Name}: {sender.ConnectionStatus}");
+                if (sender.ConnectionStatus == BluetoothConnectionStatus.Connected)
+                {
+                    IsConnected = true;
+                    IsConnecting = false;
+                    _connectionTimestamp = DateTime.Now;
+                    Logger.Info($"Device {sender.Name} connected at {_connectionTimestamp}");
+                }
+                else if (sender.ConnectionStatus == BluetoothConnectionStatus.Disconnected)
+                {
+                    Logger.Info($"Device {sender.Name} disconnected unexpectedly");
+                    _disconnectionTimestamp = DateTime.Now;
+                    
+                    // Clean up resources when device disconnects unexpectedly
+                    if (IsConnected || IsConnecting)
+                    {
+                        IsConnected = false;
+                        IsConnecting = false;
+                        await CleanupResourcesAsync();
+                        
+                        // Notify listeners that device has disconnected
+                        Disconnected?.Invoke(BluetoothAddress);
+                    }
+                    
+                    Logger.Info($"Device {sender.Name} cleanup completed at {_disconnectionTimestamp}");
+                }
             }
-            else if (sender.ConnectionStatus == BluetoothConnectionStatus.Disconnected)
+            catch (Exception ex)
             {
-                IsConnected = false;
-                IsConnecting = false;
-                _disconnectionTimestamp = DateTime.Now;
-                Logger.Info($"Device {sender.Name} disconnected at {_disconnectionTimestamp}");
+                Logger.Error($"Error in connection status handler for {sender?.Name}: {ex.Message}");
+                Logger.LogDebug($"Exception details: {ex}");
+            }
+        }
+        
+        private async Task CleanupResourcesAsync()
+        {
+            try
+            {
+                Logger.Info($"Cleaning up resources for {Name}");
+                
+                // First, disable GATT notifications if characteristic exists
+                if (MidiCharacteristic != null)
+                {
+                    try
+                    {
+                        Logger.Info("Disabling MIDI notifications before cleanup");
+                        await MidiCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
+                            GattClientCharacteristicConfigurationDescriptorValue.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogDebug($"Could not disable notifications (may already be disconnected): {ex.Message}");
+                    }
+                    MidiCharacteristic = null;
+                }
+                
+                // Close MIDI GATT port
+                if (_midiGattPort != null)
+                {
+                    Logger.Info($"Closing MIDI GATT port for {Name}");
+                    MidiManager.Instance.CloseMidiPort(Id);
+                    _midiGattPort = null;
+                }
+                
+                // Close and dispose virtual MIDI port
+                if (_midiPort != null)
+                {
+                    Logger.Info($"Disposing virtual MIDI port for {Name}");
+                    MidiManager.Instance.UnregisterVirtualMidiPort(BluetoothAddress);
+                    try
+                    {
+                        _midiPort.Close();
+                        _midiPort.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogDebug($"Error disposing virtual MIDI port: {ex.Message}");
+                    }
+                    _midiPort = null;
+                }
+                
+                Logger.Info($"Resource cleanup completed for {Name}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error during resource cleanup for {Name}: {ex.Message}");
             }
         }
         
@@ -89,40 +170,43 @@ namespace MinimalWindowsApp.Managers
         
         public async Task ConnectAsync()
         {
-                        if (IsConnected || IsConnecting)
-                        {
-                            Logger.Warning($"ConnectAsync called but connection in progress or already connected");
-                            return;
-                        }
-                        
-                        Logger.Info($"=== Connection attempt for {Name} (0x{BluetoothAddress:X}) ===");
-                        
-                        Logger.Info($"=== Connection attempt for {Name} (0x{BluetoothAddress:X}) ===");
-            
-            if (IsDisposed || Device == null)
+            if (IsConnected || IsConnecting)
             {
-                if (BluetoothAddress == 0)
-                {
-                    Logger.Error("Cannot reconnect: BluetoothAddress is 0");
-                    Logger.Warning("ConnectAsync returning early - BluetoothAddress is 0");
-                    return;
-                }
-                
-                Logger.Info($"DeviceSession was disposed, recreating from address: 0x{BluetoothAddress:X}");
-                var device = await GetDeviceFromAddress(BluetoothAddress);
-                if (device != null)
-                {
-                    Device = device;
-                    IsDisposed = false;
-                    Logger.Info("Device recreated successfully");
-                }
-                else
-                {
-                    Logger.Error("Failed to recreate device from address");
-                    Logger.Warning("ConnectAsync returning early - failed to recreate device");
-                    return;
-                }
+                Logger.Warning($"ConnectAsync called but connection in progress or already connected");
+                return;
             }
+            
+            Logger.Info($"=== Connection attempt for {Name} (0x{_bluetoothAddress:X}) ===");
+            
+            // Always get a fresh BluetoothLEDevice to avoid AccessDenied errors
+            // The previous device reference may be stale or disposed
+            if (Device != null)
+            {
+                Logger.Info("Disposing old device reference before getting fresh one");
+                try
+                {
+                    Device.ConnectionStatusChanged -= OnConnectionStatusChanged;
+                    Device.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogDebug($"Error disposing old device: {ex.Message}");
+                }
+                Device = null;
+            }
+            
+            Logger.Info($"Getting fresh BluetoothLEDevice from address: 0x{_bluetoothAddress:X}");
+            var freshDevice = await GetDeviceFromAddress(_bluetoothAddress);
+            if (freshDevice == null)
+            {
+                Logger.Error("Failed to get fresh device from address");
+                return;
+            }
+            
+            Device = freshDevice;
+            Device.ConnectionStatusChanged += OnConnectionStatusChanged;
+            IsDisposed = false;
+            Logger.Info($"Fresh device obtained: {Device.Name}");
                 
             IsConnecting = true;
             _connectionTimestamp = DateTime.Now;
@@ -192,9 +276,38 @@ namespace MinimalWindowsApp.Managers
                            
                          Logger.Info($"Instantiating VirtualMidiPort for {Name}");
                          var virtualPort = new VirtualMidiPort(Name, BluetoothAddress);
-                         
-                         Logger.Info($"About to call Create() on VirtualMidiPort for {Name}");
-                         if (virtualPort.Create())
+
+                         // Detect MIDI direction from characteristic properties
+                         var charProps = midiCharacteristic.CharacteristicProperties;
+                         bool canSend = charProps.HasFlag(GattCharacteristicProperties.Notify) || 
+                                        charProps.HasFlag(GattCharacteristicProperties.Indicate);
+                         bool canReceive = charProps.HasFlag(GattCharacteristicProperties.WriteWithoutResponse) || 
+                                           charProps.HasFlag(GattCharacteristicProperties.Write);
+
+                         uint portFlags;
+                         if (canSend && canReceive)
+                         {
+                             portFlags = VirtualMidiPort.INSTANTIATE_BOTH;
+                             Logger.Info($"Device {Name} supports bidirectional MIDI (Send + Receive)");
+                         }
+                         else if (canSend)
+                         {
+                             portFlags = VirtualMidiPort.INSTANTIATE_TX;
+                             Logger.Info($"Device {Name} supports MIDI Send only (TX)");
+                         }
+                         else if (canReceive)
+                         {
+                             portFlags = VirtualMidiPort.INSTANTIATE_RX;
+                             Logger.Info($"Device {Name} supports MIDI Receive only (RX)");
+                         }
+                         else
+                         {
+                             Logger.Warning($"Device {Name} has unexpected characteristic properties: {charProps}");
+                             portFlags = VirtualMidiPort.INSTANTIATE_BOTH; // Fallback
+                         }
+
+                         Logger.Info($"Creating VirtualMidiPort with flags: {portFlags} (props: {charProps})");
+                         if (virtualPort.Create(VirtualMidiPort.MAX_SYSEX_SIZE, portFlags))
                          {
                              Logger.Info($"VirtualMidiPort.Create() returned TRUE for {Name}");
                               virtualPort.DataReceived += async (sender, midiData) =>
@@ -202,13 +315,16 @@ namespace MinimalWindowsApp.Managers
                                   if (_midiGattPort.IsOpen && midiData.Length > 0)
                                   {
                                        var timestamp = MidiManager.Instance.GetNextTimestamp();
-                                       var timestampBytes = new byte[] { (byte)((timestamp >> 7) & 0x7F), (byte)(timestamp & 0x7F) };
+                                       // BLE MIDI spec requires bit 7 set on both timestamp bytes
+                                       var timestampHigh = (byte)(0x80 | ((timestamp >> 7) & 0x3F));
+                                       var timestampLow = (byte)(0x80 | (timestamp & 0x7F));
+                                       var timestampBytes = new byte[] { timestampHigh, timestampLow };
                                       
                                       var bleData = new byte[timestampBytes.Length + midiData.Length];
                                       System.Buffer.BlockCopy(timestampBytes, 0, bleData, 0, 2);
                                       System.Buffer.BlockCopy(midiData, 0, bleData, 2, midiData.Length);
                                       
-                                      Logger.LogDebug($"Sending to BLE - MIDI data ({midiData.Length} bytes): {BitConverter.ToString(midiData)}, Timestamp: 0x{timestampBytes[0]:X2}{timestampBytes[1]:X2}");
+                                      Logger.LogDebug($"Sending to BLE - MIDI data ({midiData.Length} bytes): {BitConverter.ToString(midiData)}, Timestamp: 0x{timestampHigh:X2}{timestampLow:X2}");
                                       Logger.LogDebug($"BLE data ({bleData.Length} bytes): {BitConverter.ToString(bleData)}");
                                       
                                       try
@@ -220,10 +336,22 @@ namespace MinimalWindowsApp.Managers
                                       {
                                           Logger.Error($"Error sending MIDI data to BLE device {Name}: {ex.Message}");
                                       }
+                                      
+                                      // Signal outgoing traffic  
+                                      var deviceInfo = MidiManager.Instance.GetDeviceInfo(BluetoothAddress);
+                                      deviceInfo?.SetTraffic(isIncoming: false);
                                   }
                               };
                              
-                             virtualPort.StartReceive();
+                             // Only start receive task if device can receive MIDI from apps
+                             if (canReceive)
+                             {
+                                 virtualPort.StartReceive();
+                             }
+                             else
+                             {
+                                 Logger.Info($"Skipping receive task for {Name} - device does not receive MIDI");
+                             }
                              MidiManager.Instance.RegisterVirtualMidiPort(BluetoothAddress, virtualPort);
                              
                              _midiPort = virtualPort;
@@ -347,13 +475,14 @@ namespace MinimalWindowsApp.Managers
                 {
                     try
                     {
+                        Device.ConnectionStatusChanged -= OnConnectionStatusChanged;
                         Device.Dispose();
                     }
                     catch (Exception ex)
                     {
                         Logger.Error($"Error disposing BLE device: {ex.Message}");
                     }
-                    Device = null!;
+                    Device = null;
                 }
                 
                 IsConnected = false;
@@ -369,7 +498,7 @@ namespace MinimalWindowsApp.Managers
         
         public void Dispose()
         {
-            if (IsDisposed || Device == null)
+            if (IsDisposed)
             {
                 Logger.Warning("Dispose called on already disposed DeviceSession");
                 return;
@@ -379,43 +508,81 @@ namespace MinimalWindowsApp.Managers
             Logger.Info($"Disposing DeviceSession for {Name}");
             
             _disconnectionTimestamp = DateTime.Now;
-            Logger.Info($"Disconnection timestamp: {_disconnectionTimestamp:yyyy-MM-dd HH:mm:ss.fff}");
-            
             if (_connectionTimestamp != DateTime.MinValue)
             {
                 var duration = _disconnectionTimestamp - _connectionTimestamp;
                 Logger.Info($"Connection duration: {duration.TotalSeconds:F2} seconds");
             }
             
+            // Unsubscribe from events first
+            if (Device != null)
+            {
+                Device.ConnectionStatusChanged -= OnConnectionStatusChanged;
+            }
+            
+            // Disable notifications and clean up MIDI characteristic
             if (MidiCharacteristic != null)
             {
-                Logger.Info("Cleaning up MIDI characteristic...");
+                try
+                {
+                    Logger.Info("Disabling MIDI notifications...");
+                    // Fire and forget - we're disposing anyway
+                    _ = MidiCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
+                        GattClientCharacteristicConfigurationDescriptorValue.None);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogDebug($"Could not disable notifications during dispose: {ex.Message}");
+                }
                 MidiCharacteristic = null;
             }
             
-            if (BluetoothAddress != 0)
-            {
-                Logger.Info($"Removing virtual MIDI port for {Name}");
-                MidiManager.Instance.RemoveVirtualMidiPort(BluetoothAddress);
-            }
-            
-            if (_midiGattPort != null)
-            {
-                Logger.Info($"Closing MIDI GATT port for {Name}");
-                MidiManager.Instance.CloseMidiPort(Id);
-                _midiGattPort = null;
-            }
-            
+            // Clean up virtual MIDI port (must be done before closing GATT port)
             if (_midiPort != null)
             {
                 Logger.Info($"Disposing virtual MIDI port for {Name}");
-                _midiPort.Dispose();
+                MidiManager.Instance.UnregisterVirtualMidiPort(BluetoothAddress);
+                try
+                {
+                    _midiPort.Close();
+                    _midiPort.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning($"Error disposing virtual MIDI port: {ex.Message}");
+                }
                 _midiPort = null;
             }
             
-            Logger.Info($"Disposing BluetoothLEDevice: {Device.Name}");
-            Device.Dispose();
-            Device = null!;
+            // Clean up GATT port
+            if (_midiGattPort != null)
+            {
+                Logger.Info($"Closing MIDI GATT port for {Name}");
+                try
+                {
+                    MidiManager.Instance.CloseMidiPort(Id);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning($"Error closing MIDI GATT port: {ex.Message}");
+                }
+                _midiGattPort = null;
+            }
+            
+            // Dispose BLE device last
+            if (Device != null)
+            {
+                Logger.Info($"Disposing BluetoothLEDevice: {Device.Name}");
+                try
+                {
+                    Device.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning($"Error disposing BLE device: {ex.Message}");
+                }
+                Device = null;
+            }
             
             IsConnected = false;
             IsConnecting = false;

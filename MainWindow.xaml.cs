@@ -40,16 +40,6 @@ namespace MinimalWindowsApp
             base.OnPreviewKeyDown(e);
         }
 
-        private void ConnectedDevicesList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-        {
-            if (_viewModel?.SelectedConnectedDevice != null)
-            {
-                var device = _viewModel.SelectedConnectedDevice;
-                _viewModel.DisconnectCommand.Execute(device);
-                _viewModel.SelectedConnectedDevice = null;
-            }
-        }
-
         private void ListBoxItem_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             if (sender is System.Windows.Controls.ListBoxItem item && item.DataContext is BluetoothDeviceInfo device)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
 using Windows.Devices.Bluetooth;
@@ -71,6 +72,7 @@ namespace MinimalWindowsApp.Managers
             var newSession = await DeviceSession.CreateFromAddress(bluetoothAddress);
             if (newSession != null)
             {
+                newSession.Disconnected += OnSessionDisconnected;
                 _sessions[bluetoothAddress] = newSession;
                 Logger.Info($"New session created and stored for 0x{bluetoothAddress:X}");
             }
@@ -86,6 +88,22 @@ namespace MinimalWindowsApp.Managers
                 _sessions.Remove(bluetoothAddress);
                 DeviceDisconnected?.Invoke(bluetoothAddress);
             }
+        }
+        
+        private void OnSessionDisconnected(ulong bluetoothAddress)
+        {
+            Logger.Info($"Session disconnected event received for 0x{bluetoothAddress:X}");
+            if (_sessions.ContainsKey(bluetoothAddress))
+            {
+                _sessions.Remove(bluetoothAddress);
+            }
+            DeviceDisconnected?.Invoke(bluetoothAddress);
+        }
+        
+        public BluetoothDeviceInfo? GetDeviceInfo(ulong bluetoothAddress)
+        {
+            _discoveredDevices.TryGetValue(bluetoothAddress, out var deviceInfo);
+            return deviceInfo;
         }
         
         private void OnAdvertisementReceived(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
@@ -158,17 +176,86 @@ namespace MinimalWindowsApp.Managers
         }
     }
     
-    public class BluetoothDeviceInfo
+    public class BluetoothDeviceInfo : INotifyPropertyChanged
     {
+        private bool _incomingTraffic;
+        private bool _outgoingTraffic;
+        private System.Windows.Threading.DispatcherTimer? _trafficClearTimer;
+        
         public ulong BluetoothAddress { get; }
         public string Name { get; }
         public BluetoothLEDevice? Device { get; }
+        
+        public bool IncomingTraffic
+        {
+            get => _incomingTraffic;
+            private set
+            {
+                if (_incomingTraffic != value)
+                {
+                    _incomingTraffic = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+        
+        public bool OutgoingTraffic
+        {
+            get => _outgoingTraffic;
+            private set
+            {
+                if (_outgoingTraffic != value)
+                {
+                    _outgoingTraffic = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
         
         public BluetoothDeviceInfo(ulong bluetoothAddress, string name, BluetoothLEDevice? device)
         {
             BluetoothAddress = bluetoothAddress;
             Name = name;
             Device = device;
+        }
+        
+        public void SetTraffic(bool isIncoming)
+        {
+            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            {
+                if (isIncoming)
+                    IncomingTraffic = true;
+                else
+                    OutgoingTraffic = true;
+                
+                ResetTrafficClearTimer();
+            });
+        }
+        
+        private void ResetTrafficClearTimer()
+        {
+            if (_trafficClearTimer == null)
+            {
+                _trafficClearTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(200)
+                };
+                _trafficClearTimer.Tick += (s, e) =>
+                {
+                    IncomingTraffic = false;
+                    OutgoingTraffic = false;
+                    _trafficClearTimer.Stop();
+                };
+            }
+            
+            _trafficClearTimer.Stop();
+            _trafficClearTimer.Start();
+        }
+        
+        public event PropertyChangedEventHandler? PropertyChanged;
+        protected void OnPropertyChanged([System.Runtime.CompilerServices.CallerMemberName] string? name = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
     }
 }

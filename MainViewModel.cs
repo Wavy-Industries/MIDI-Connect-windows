@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -9,12 +11,12 @@ using MinimalWindowsApp.Managers;
 
 namespace MinimalWindowsApp
 {
-    public class MainViewModel : INotifyPropertyChanged
+    public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         private readonly BluetoothManager _bluetoothManager;
         private readonly MidiManager _midiManager;
         private string _status = "Initializing...";
-        private DeviceSession? _currentSession;
+        private readonly Dictionary<ulong, DeviceSession> _deviceSessions = new();
         private BluetoothDeviceInfo? _selectedConnectedDevice;
         private BluetoothDeviceInfo? _selectedDiscoveredDevice;
         
@@ -24,6 +26,7 @@ namespace MinimalWindowsApp
         public ICommand DisconnectCommand { get; }
         public ICommand TestMidiCommand { get; }
         public ICommand SettingsCommand { get; }
+        public ICommand ExitCommand { get; }
         
         public BluetoothDeviceInfo? SelectedConnectedDevice
         {
@@ -75,7 +78,10 @@ namespace MinimalWindowsApp
                 _bluetoothManager = BluetoothManager.Instance;
                 _midiManager = MidiManager.Instance;
                 
+                ExitCommand = new RelayCommand<object>(_ => Application.Current.Shutdown());
+                
                 _bluetoothManager.DeviceDiscovered += OnDeviceDiscovered;
+                _bluetoothManager.DeviceDisconnected += OnDeviceDisconnected;
                 
                 ConnectCommand = new RelayCommand<BluetoothDeviceInfo>(async device => await ConnectToDevice(device));
                 DisconnectCommand = new RelayCommand<BluetoothDeviceInfo>(DisconnectDevice);
@@ -106,6 +112,51 @@ namespace MinimalWindowsApp
             });
         }
         
+        private void OnDeviceDisconnected(ulong bluetoothAddress)
+        {
+            Logger.Info($"Device disconnected event received for 0x{bluetoothAddress:X}");
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                // Find the device in connected devices
+                BluetoothDeviceInfo? device = null;
+                foreach (var d in ConnectedDevices)
+                {
+                    if (d.BluetoothAddress == bluetoothAddress)
+                    {
+                        device = d;
+                        break;
+                    }
+                }
+                
+                if (device != null)
+                {
+                    Logger.Info($"Moving {device.Name} from Connected to Discovered");
+                    ConnectedDevices.Remove(device);
+                    
+                    // Only add back to discovered if not already there
+                    bool alreadyInDiscovered = false;
+                    foreach (var d in DiscoveredDevices)
+                    {
+                        if (d.BluetoothAddress == bluetoothAddress)
+                        {
+                            alreadyInDiscovered = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!alreadyInDiscovered)
+                    {
+                        DiscoveredDevices.Add(device);
+                    }
+                    
+                    Status = $"Disconnected from {device.Name}";
+                    
+                    // Clean up our session reference
+                    _deviceSessions.Remove(bluetoothAddress);
+                }
+            });
+        }
+        
         private async Task ConnectToDevice(BluetoothDeviceInfo device)
         {
             try
@@ -113,26 +164,27 @@ namespace MinimalWindowsApp
                 Logger.Info($"Connecting to {device.Name}...");
                 Status = $"Connecting to {device.Name}...";
                 
-                _currentSession = await _bluetoothManager.GetOrCreateSession(device.BluetoothAddress);
-                if (_currentSession == null)
+                var session = await _bluetoothManager.GetOrCreateSession(device.BluetoothAddress);
+                if (session == null)
                 {
                     Status = "Failed to create device session";
                     Logger.Error($"Failed to create session for {device.Name}");
                     return;
                 }
                 
-                await _currentSession.ConnectAsync();
+                await session.ConnectAsync();
                 
-                if (_currentSession.Device == null)
+                if (session.Device == null)
                 {
                     Logger.Error("DeviceSession device is null after connection attempt");
                     Status = "Device connection failed";
                     return;
                 }
                 
-                if (_currentSession.MidiCharacteristic is not null)
+                if (session.MidiCharacteristic is not null)
                 {
-                    _midiManager.OpenMidiPort(_currentSession.Device.DeviceId, device.Name, _currentSession.MidiCharacteristic);
+                    _midiManager.OpenMidiPort(session.Device.DeviceId, device.Name, session.MidiCharacteristic);
+                    _deviceSessions[device.BluetoothAddress] = session;
                     
                     Logger.Info($"Connected to {device.Name}. Current state - DiscoveredDevices: {DiscoveredDevices.Count}, ConnectedDevices: {ConnectedDevices.Count}");
                     Application.Current.Dispatcher.Invoke(() =>
@@ -150,10 +202,10 @@ namespace MinimalWindowsApp
                     Logger.Error("Failed to find MIDI characteristic in connected device");
                     Status = "Failed to find MIDI service";
                     
-                    if (_currentSession.IsConnected)
+                    if (session.IsConnected)
                     {
                         Logger.Info("Disconnecting session due to missing MIDI characteristic");
-                        _currentSession.IsConnected = false;
+                        session.IsConnected = false;
                     }
                 }
             }
@@ -190,16 +242,16 @@ namespace MinimalWindowsApp
                 }
                 
                 Logger.Info($"Disposing DeviceSession for {device.Name}");
-                if (_currentSession != null)
+                if (_deviceSessions.TryGetValue(device.BluetoothAddress, out var session))
                 {
-                    Logger.Info($"Session was connected: {_currentSession.IsConnected}");
-                    Logger.Info($"Session was connecting: {_currentSession.IsConnecting}");
-                    _currentSession.Dispose();
-                    _currentSession = null;
+                    Logger.Info($"Session was connected: {session.IsConnected}");
+                    Logger.Info($"Session was connecting: {session.IsConnecting}");
+                    session.Dispose();
+                    _deviceSessions.Remove(device.BluetoothAddress);
                 }
                 else
                 {
-                    Logger.Warning("Current session was null during disconnect");
+                    Logger.Warning($"No session found for device {device.Name}");
                 }
                 
                 _bluetoothManager.RemoveSession(device.BluetoothAddress);
@@ -209,8 +261,28 @@ namespace MinimalWindowsApp
                     Logger.Info($"Before disconnect: ConnectedDevices={ConnectedDevices.Count}, DiscoveredDevices={DiscoveredDevices.Count}");
                     ConnectedDevices.Remove(device);
                     Logger.Info($"After Remove from ConnectedDevices: Count={ConnectedDevices.Count}");
-                    DiscoveredDevices.Add(device);
-                    Logger.Info($"After Add to DiscoveredDevices: Count={DiscoveredDevices.Count}");
+                    
+                    // Only add back to discovered if not already there
+                    bool alreadyInDiscovered = false;
+                    foreach (var d in DiscoveredDevices)
+                    {
+                        if (d.BluetoothAddress == device.BluetoothAddress)
+                        {
+                            alreadyInDiscovered = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!alreadyInDiscovered)
+                    {
+                        DiscoveredDevices.Add(device);
+                        Logger.Info($"After Add to DiscoveredDevices: Count={DiscoveredDevices.Count}");
+                    }
+                    else
+                    {
+                        Logger.Info($"Device already in DiscoveredDevices, not adding duplicate");
+                    }
+                    
                     Status = $"Disconnected from {device.Name}";
                 });
                 
@@ -245,6 +317,34 @@ namespace MinimalWindowsApp
             }
         }
         
+        public void Dispose()
+        {
+            Logger.Info("Disposing MainViewModel");
+            
+            // Unsubscribe from events
+            _bluetoothManager.DeviceDiscovered -= OnDeviceDiscovered;
+            _bluetoothManager.DeviceDisconnected -= OnDeviceDisconnected;
+            
+            // Dispose all active sessions
+            foreach (var session in _deviceSessions.Values)
+            {
+                try
+                {
+                    session.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warning($"Error disposing session: {ex.Message}");
+                }
+            }
+            _deviceSessions.Clear();
+            
+            // Stop bluetooth scanning
+            _bluetoothManager.StopScanning();
+            
+            Logger.Info("MainViewModel disposed");
+        }
+        
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
         {
@@ -263,8 +363,19 @@ namespace MinimalWindowsApp
             _canExecute = canExecute;
         }
         
-        public bool CanExecute(object? parameter) => _canExecute?.Invoke((T)parameter!) ?? true;
-        public void Execute(object? parameter) => _execute((T)parameter!);
+        public bool CanExecute(object? parameter)
+        {
+            if (parameter == null && default(T) != null)
+                return _canExecute == null;
+            return _canExecute?.Invoke((T)parameter!) ?? true;
+        }
+
+        public void Execute(object? parameter)
+        {
+            if (parameter == null && default(T) != null)
+                return;
+            _execute((T)parameter!);
+        }
         public event EventHandler? CanExecuteChanged {
             add => CommandManager.RequerySuggested += value;
             remove => CommandManager.RequerySuggested -= value;

@@ -11,19 +11,23 @@ namespace MinimalWindowsApp
     {
         private static TaskbarIcon? _notifyIcon;
         private MainWindow? _mainWindow;
+        public static MainViewModel? ViewModel { get; private set; }
 
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
-            Logger.Info("=== Application starting ===");
+            
+            // Initialize logger (creates fresh temp log file)
+            Logger.Initialize();
+            Logger.Info("Application starting");
             
             try
             {
                 // Create system tray icon
                 _notifyIcon = new TaskbarIcon
                 {
-                    Icon = new Icon(SystemIcons.Application, 40, 40),
-                    ToolTipText = "MIDI Toolbar"
+                    Icon = new Icon("icon.ico"),
+                    ToolTipText = "MIDI Connect"
                 };
 
                 // Create context menu
@@ -61,7 +65,12 @@ namespace MinimalWindowsApp
             if (_mainWindow == null)
             {
                 _mainWindow = new MainWindow();
-                _mainWindow.Closed += (s, e) => _mainWindow = null;
+                ViewModel = _mainWindow.DataContext as MainViewModel;
+                _mainWindow.Closed += (s, e) => 
+                {
+                    _mainWindow = null;
+                    ViewModel = null;
+                };
                 _mainWindow.ShowNearTaskbar();
             }
             else
@@ -72,7 +81,15 @@ namespace MinimalWindowsApp
 
         protected override void OnExit(ExitEventArgs e)
         {
+            Logger.Info("Application exiting");
+            
+            // Check if there were any errors during the session
+            Logger.CheckAndPromptForErrors();
+            
+            // Cleanup
             _notifyIcon?.Dispose();
+            Logger.Shutdown();
+            
             base.OnExit(e);
         }
     }
