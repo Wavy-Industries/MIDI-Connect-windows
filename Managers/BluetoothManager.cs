@@ -174,6 +174,52 @@ namespace MinimalWindowsApp.Managers
         {
             Logger.Warning($"Advertisement watcher stopped: {args.Error}");
         }
+        
+        /// <summary>
+        /// Shuts down the BluetoothManager, stopping scanning and disposing all device sessions.
+        /// Should be called when the application is exiting.
+        /// </summary>
+        public void Shutdown()
+        {
+            Logger.Info("=== BluetoothManager.Shutdown() starting ===");
+            
+            try
+            {
+                // Stop scanning first
+                StopScanning();
+                
+                // Unsubscribe from advertisement watcher events
+                _advertisementWatcher.Received -= OnAdvertisementReceived;
+                _advertisementWatcher.Stopped -= OnAdvertisementWatcherStopped;
+                
+                // Dispose all active sessions
+                Logger.Info($"Disposing {_sessions.Count} active device sessions...");
+                foreach (var kvp in _sessions.ToList())
+                {
+                    try
+                    {
+                        Logger.Info($"Disposing session for device 0x{kvp.Key:X}");
+                        kvp.Value.Disconnected -= OnSessionDisconnected;
+                        kvp.Value.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning($"Error disposing session 0x{kvp.Key:X}: {ex.Message}");
+                    }
+                }
+                _sessions.Clear();
+                
+                // Clear discovered devices
+                _discoveredDevices.Clear();
+                
+                Logger.Info("=== BluetoothManager.Shutdown() completed ===");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error during BluetoothManager shutdown: {ex.Message}");
+                Logger.LogDebug($"Shutdown exception details: {ex}");
+            }
+        }
     }
     
     public class BluetoothDeviceInfo : INotifyPropertyChanged

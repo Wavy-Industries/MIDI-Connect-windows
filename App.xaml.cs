@@ -1,5 +1,6 @@
 using System;
 using MinimalWindowsApp;
+using MinimalWindowsApp.Managers;
 using System.Windows;
 using System.Windows.Controls;
 using Hardcodet.Wpf.TaskbarNotification;
@@ -81,12 +82,46 @@ namespace MinimalWindowsApp
 
         protected override void OnExit(ExitEventArgs e)
         {
-            Logger.Info("Application exiting");
+            Logger.Info("=== Application exiting - starting cleanup ===");
+            
+            try
+            {
+                // Dispose the ViewModel first (disconnects all devices)
+                if (ViewModel != null)
+                {
+                    Logger.Info("Disposing MainViewModel...");
+                    ViewModel.Dispose();
+                    ViewModel = null;
+                }
+                
+                // Close the main window if still open
+                if (_mainWindow != null)
+                {
+                    Logger.Info("Closing main window...");
+                    _mainWindow.Close();
+                    _mainWindow = null;
+                }
+                
+                // Cleanup BluetoothManager (stops scanning, disposes all sessions)
+                Logger.Info("Cleaning up BluetoothManager...");
+                BluetoothManager.Instance.Shutdown();
+                
+                // Cleanup MidiManager (closes all MIDI ports)
+                Logger.Info("Cleaning up MidiManager...");
+                MidiManager.Instance.Shutdown();
+                
+                Logger.Info("=== Application cleanup completed ===");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error during application cleanup: {ex.Message}");
+                Logger.LogDebug($"Cleanup exception details: {ex}");
+            }
             
             // Check if there were any errors during the session
             Logger.CheckAndPromptForErrors();
             
-            // Cleanup
+            // Cleanup tray icon
             _notifyIcon?.Dispose();
             Logger.Shutdown();
             

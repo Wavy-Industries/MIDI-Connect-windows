@@ -12,8 +12,9 @@ namespace MinimalWindowsApp.Managers
     {
         private readonly ulong _bluetoothAddress;
         private readonly string _deviceName;
+        private string? _cachedDeviceId;
         
-        public string Id => Device?.DeviceId ?? $"ble_{_bluetoothAddress:X}";
+        public string Id => _cachedDeviceId ?? Device?.DeviceId ?? $"ble_{_bluetoothAddress:X}";
         public BluetoothLEDevice? Device { get; private set; }
         public string Name => Device?.Name ?? _deviceName;
         public ulong BluetoothAddress => _bluetoothAddress;
@@ -206,7 +207,8 @@ namespace MinimalWindowsApp.Managers
             Device = freshDevice;
             Device.ConnectionStatusChanged += OnConnectionStatusChanged;
             IsDisposed = false;
-            Logger.Info($"Fresh device obtained: {Device.Name}");
+            _cachedDeviceId = Device.DeviceId; // Cache the device ID for cleanup
+            Logger.Info($"Fresh device obtained: {Device.Name} (ID: {_cachedDeviceId})");
                 
             IsConnecting = true;
             _connectionTimestamp = DateTime.Now;

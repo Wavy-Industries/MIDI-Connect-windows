@@ -273,6 +273,62 @@ namespace MinimalWindowsApp.Managers
                  return false;
              }
          }
+         
+         /// <summary>
+         /// Shuts down the MidiManager, closing all MIDI ports and virtual MIDI ports.
+         /// Should be called when the application is exiting.
+         /// </summary>
+         public void Shutdown()
+         {
+             Logger.Info("=== MidiManager.Shutdown() starting ===");
+             
+             try
+             {
+                 // Close all GATT MIDI ports
+                 Logger.Info($"Closing {_midiPorts.Count} GATT MIDI ports...");
+                 CloseAllPorts();
+                 
+                 // Close and dispose all virtual MIDI ports (Windows MIDI API)
+                 Logger.Info($"Disposing {_virtualMidiPorts.Count} Windows virtual MIDI ports...");
+                 foreach (var kvp in _virtualMidiPorts.ToList())
+                 {
+                     try
+                     {
+                         Logger.Info($"Disposing virtual MIDI port for device 0x{kvp.Key:X}");
+                         kvp.Value?.Dispose();
+                     }
+                     catch (Exception ex)
+                     {
+                         Logger.Warning($"Error disposing virtual MIDI port 0x{kvp.Key:X}: {ex.Message}");
+                     }
+                 }
+                 _virtualMidiPorts.Clear();
+                 
+                 // Close and dispose all teVirtualMIDI ports
+                 Logger.Info($"Disposing {_teVirtualMidiPorts.Count} teVirtualMIDI ports...");
+                 foreach (var kvp in _teVirtualMidiPorts.ToList())
+                 {
+                     try
+                     {
+                         Logger.Info($"Disposing teVirtualMIDI port for device 0x{kvp.Key:X}");
+                         kvp.Value?.Close();
+                         kvp.Value?.Dispose();
+                     }
+                     catch (Exception ex)
+                     {
+                         Logger.Warning($"Error disposing teVirtualMIDI port 0x{kvp.Key:X}: {ex.Message}");
+                     }
+                 }
+                 _teVirtualMidiPorts.Clear();
+                 
+                 Logger.Info("=== MidiManager.Shutdown() completed ===");
+             }
+             catch (Exception ex)
+             {
+                 Logger.Error($"Error during MidiManager shutdown: {ex.Message}");
+                 Logger.LogDebug($"Shutdown exception details: {ex}");
+             }
+         }
      }
     
     public class MidiPort : IDisposable
@@ -319,6 +375,11 @@ namespace MinimalWindowsApp.Managers
             }
         }
         
+          // MINIMAL BLE MIDI PARSING IMPLEMENTATION
+          // This parser assumes a simplified BLE MIDI structure where each message is exactly 5 bytes:
+          // [timestampHigh][timestampLow][status][data1][data2]
+          // Multiple messages can arrive in a single packet (length must be divisible by 5).
+          // This does NOT handle running status, SysEx, or variable-length messages per the full BLE MIDI spec.
           private void OnMidiDataReceived(GattCharacteristic sender, GattValueChangedEventArgs args)
           {
               var data = new byte[args.CharacteristicValue.Length];
@@ -327,25 +388,46 @@ namespace MinimalWindowsApp.Managers
                   reader.ReadBytes(data);
               }
               
-              if (data.Length >= 2)
+              const int BLE_MIDI_MESSAGE_SIZE = 5; // 2 timestamp bytes + 3 MIDI message bytes
+              
+              if (data.Length == 0)
               {
-                  var timestampHigh = data[0];
-                  var timestampLow = data[1];
-                  var parsedData = data.Skip(2).ToArray();
+                  return;
+              }
+              
+              if (data.Length % BLE_MIDI_MESSAGE_SIZE != 0)
+              {
+                  Logger.Warning($"[BLE MIDI] Received data length {data.Length} is not divisible by {BLE_MIDI_MESSAGE_SIZE}. " +
+                      $"This minimal parser expects exactly {BLE_MIDI_MESSAGE_SIZE}-byte messages. Data may be malformed or use unsupported BLE MIDI features.");
+              }
+              
+              var deviceId = ParseBluetoothAddressFromDeviceId(DeviceId);
+              if (!deviceId.HasValue)
+              {
+                  return;
+              }
+              
+              var virtualPort = MidiManager.Instance.GetTeVirtualMidiPort(deviceId.Value);
+              var deviceInfo = MidiManager.Instance.GetDeviceInfo(deviceId.Value);
+              
+              // Process each 5-byte BLE MIDI message
+              int messageCount = data.Length / BLE_MIDI_MESSAGE_SIZE;
+              for (int i = 0; i < messageCount; i++)
+              {
+                  int offset = i * BLE_MIDI_MESSAGE_SIZE;
+                  // Skip timestamp bytes (offset+0 and offset+1), extract 3-byte MIDI message
+                  var midiMessage = new byte[3];
+                  midiMessage[0] = data[offset + 2]; // status byte
+                  midiMessage[1] = data[offset + 3]; // data1
+                  midiMessage[2] = data[offset + 4]; // data2
                   
-                  if (parsedData.Length > 0)
-                  {
-                      var deviceId = ParseBluetoothAddressFromDeviceId(DeviceId);
-                      if (deviceId.HasValue)
-                      {
-                          var virtualPort = MidiManager.Instance.GetTeVirtualMidiPort(deviceId.Value);
-                          virtualPort?.SendData(parsedData);
-                          
-                          // Signal incoming traffic
-                          var deviceInfo = MidiManager.Instance.GetDeviceInfo(deviceId.Value);
-                          deviceInfo?.SetTraffic(isIncoming: true);
-                      }
-                  }
+                  virtualPort?.SendData(midiMessage);
+              }
+              
+              // Signal incoming traffic (once per packet, not per message)
+              if (messageCount > 0)
+              {
+                  deviceInfo?.SetTraffic(isIncoming: true);
               }
           }
         

@@ -116,6 +116,21 @@ namespace MinimalWindowsApp
                 // Write to debug output
                 Debug.WriteLine(logMessage);
                 
+                // Write to console (visible in Debug builds with console window)
+#if DEBUG
+                var originalColor = Console.ForegroundColor;
+                Console.ForegroundColor = level switch
+                {
+                    LogLevel.Error => ConsoleColor.Red,
+                    LogLevel.Warning => ConsoleColor.Yellow,
+                    LogLevel.Info => ConsoleColor.Cyan,
+                    LogLevel.Debug => ConsoleColor.Gray,
+                    _ => ConsoleColor.White
+                };
+                Console.WriteLine(logMessage);
+                Console.ForegroundColor = originalColor;
+#endif
+                
                 // Write to file
                 try
                 {

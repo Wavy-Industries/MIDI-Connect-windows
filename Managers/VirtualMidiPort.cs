@@ -60,8 +60,16 @@ namespace MinimalWindowsApp.Managers
             {
                 if (_midiPort != null)
                 {
-                    Logger.Warning($"Virtual MIDI port already exists for {_portName}");
-                    return true;
+                    Logger.Warning($"Virtual MIDI port already exists for {_portName}, closing existing port first");
+                    try
+                    {
+                        _midiPort.shutdown();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogDebug($"Error shutting down existing port: {ex.Message}");
+                    }
+                    _midiPort = null;
                 }
                 
                 Logger.Info($"Creating virtual MIDI port '{_portName}'");

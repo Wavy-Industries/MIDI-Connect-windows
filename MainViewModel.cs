@@ -229,18 +229,11 @@ namespace MinimalWindowsApp
             {
                 Logger.Info($"=== Disconnecting from {device.Name} ===");
                 
-                var deviceId = device.Device?.DeviceId ?? $"{device.BluetoothAddress}";
-                Logger.Info($"Closing MIDI port for deviceId: {deviceId}");
-                
-                try
-                {
-                    _midiManager.CloseMidiPort(deviceId);
-                }
-                catch (Exception ex)
-                {
-                    Logger.Warning($"Error closing MIDI port: {ex.Message}");
-                }
-                
+                // Dispose the DeviceSession - this handles all cleanup including:
+                // - Virtual MIDI port (teVirtualMIDI)
+                // - MIDI GATT port
+                // - BLE device connection
+                // - GATT notifications
                 Logger.Info($"Disposing DeviceSession for {device.Name}");
                 if (_deviceSessions.TryGetValue(device.BluetoothAddress, out var session))
                 {
