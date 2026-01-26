@@ -10,8 +10,8 @@ bld/
 [Oo]bj/
 [Ll]og/
 
-# Installer output
-Installer/Output/
+# Installer
+Installer/
 
 # .NET Core
 project.lock.json
