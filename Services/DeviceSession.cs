@@ -5,10 +5,10 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
-using MinimalWindowsApp.Infrastructure;
-using MinimalWindowsApp.Midi;
+using MIDIConnect.Infrastructure;
+using MIDIConnect.Midi;
 
-namespace MinimalWindowsApp.Services
+namespace MIDIConnect.Services
 {
     public class DeviceSession : INotifyPropertyChanged, IDisposable
     {

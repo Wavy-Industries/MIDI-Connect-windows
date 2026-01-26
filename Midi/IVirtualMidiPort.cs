@@ -1,6 +1,6 @@
 using System;
 
-namespace MinimalWindowsApp.Midi
+namespace MIDIConnect.Midi
 {
     public interface IVirtualMidiPort : IDisposable
     {

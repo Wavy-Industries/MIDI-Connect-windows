@@ -1,7 +1,7 @@
 using System;
 using System.Windows.Input;
 
-namespace MinimalWindowsApp.Infrastructure
+namespace MIDIConnect.Infrastructure
 {
     public class RelayCommand<T> : ICommand
     {

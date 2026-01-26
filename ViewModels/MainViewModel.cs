@@ -5,10 +5,10 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
-using MinimalWindowsApp.Infrastructure;
-using MinimalWindowsApp.Services;
+using MIDIConnect.Infrastructure;
+using MIDIConnect.Services;
 
-namespace MinimalWindowsApp.ViewModels
+namespace MIDIConnect.ViewModels
 {
     public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
