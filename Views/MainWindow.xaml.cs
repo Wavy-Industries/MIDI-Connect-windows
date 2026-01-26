@@ -1,11 +1,11 @@
 using System;
 using System.Windows;
 using System.Windows.Input;
-using MinimalWindowsApp.Infrastructure;
-using MinimalWindowsApp.Services;
-using MinimalWindowsApp.ViewModels;
+using MIDIConnect.Infrastructure;
+using MIDIConnect.Services;
+using MIDIConnect.ViewModels;
 
-namespace MinimalWindowsApp.Views
+namespace MIDIConnect.Views
 {
     public partial class MainWindow : Window
     {
@@ -14,6 +14,7 @@ namespace MinimalWindowsApp.Views
         public MainWindow()
         {
             InitializeComponent();
+            CopyrightText.Text = $"© {DateTime.Now.Year} Wavy Industries";
             try
             {
                 _viewModel = new MainViewModel();
@@ -65,10 +66,11 @@ namespace MinimalWindowsApp.Views
 
         public void ShowNearTaskbar()
         {
-            var workingArea = SystemParameters.WorkArea;
-            Left = workingArea.Right - Width - 10;
-            Top = workingArea.Bottom - Height - 40;
             Show();
+            UpdateLayout();
+            var workingArea = SystemParameters.WorkArea;
+            Left = workingArea.Right - ActualWidth - 10;
+            Top = workingArea.Bottom - ActualHeight - 10;
             Activate();
         }
     }

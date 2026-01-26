@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace MinimalWindowsApp.Midi
+namespace MIDIConnect.Midi
 {
     /// <summary>
     /// Minimal BLE MIDI packet parser.

@@ -1,8 +1,8 @@
 using System;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
-using MinimalWindowsApp.Infrastructure;
+using MIDIConnect.Infrastructure;
 
-namespace MinimalWindowsApp.Midi
+namespace MIDIConnect.Midi
 {
     public class GattMidiPort : IDisposable
     {

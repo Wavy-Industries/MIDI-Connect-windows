@@ -3,12 +3,12 @@ using System.Windows;
 using System.Windows.Controls;
 using Hardcodet.Wpf.TaskbarNotification;
 using System.Drawing;
-using MinimalWindowsApp.Infrastructure;
-using MinimalWindowsApp.Services;
-using MinimalWindowsApp.ViewModels;
-using MinimalWindowsApp.Views;
+using MIDIConnect.Infrastructure;
+using MIDIConnect.Services;
+using MIDIConnect.ViewModels;
+using MIDIConnect.Views;
 
-namespace MinimalWindowsApp
+namespace MIDIConnect
 {
     public partial class App : Application
     {

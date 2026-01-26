@@ -4,7 +4,7 @@ using System.IO;
 using System.Text;
 using System.Windows;
 
-namespace MinimalWindowsApp.Infrastructure
+namespace MIDIConnect.Infrastructure
 {
     public enum LogLevel
     {

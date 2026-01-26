@@ -4,9 +4,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Advertisement;
-using MinimalWindowsApp.Infrastructure;
+using MIDIConnect.Infrastructure;
 
-namespace MinimalWindowsApp.Services
+namespace MIDIConnect.Services
 {
     public class BluetoothService
     {

@@ -1,9 +1,9 @@
 using System;
 using System.Threading.Tasks;
 using TobiasErichsen.teVirtualMIDI;
-using MinimalWindowsApp.Infrastructure;
+using MIDIConnect.Infrastructure;
 
-namespace MinimalWindowsApp.Midi
+namespace MIDIConnect.Midi
 {
     public class TeVirtualMidiPort : IVirtualMidiPort
     {
