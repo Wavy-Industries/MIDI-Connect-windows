@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(ren MinimalWindowsApp.csproj MIDIConnect.csproj)",
-      "Bash(powershell -Command \"Rename-Item ''C:\\\\Users\\\\Tester\\\\Desktop\\\\MinimalWindowsApp\\\\MinimalWindowsApp.csproj'' ''MIDIConnect.csproj''\")"
-    ]
-  }
-}

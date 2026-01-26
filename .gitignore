@@ -177,3 +177,6 @@ AppPackages/
 *.bak
 *.backup
 *~
+
+# Agents
+.claude/
