@@ -27,7 +27,5 @@ MIDI Connect is in an early experimental phase and expect there to be problems. 
 - rememeber devices through a device store.
 - auto-connect
 
-Coding agents are welcome to contribute, but be cautious. We won't accept messy code. It is recommended to use `opencode`. `Kimi K2` is the recommended model because it balances cost, speed and quality very well.
-
 ## License
 For commercial actors, please review the `LICENSE` carefully.
