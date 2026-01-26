@@ -4,7 +4,7 @@ Let's finally make it simple to connect Bluetooth MIDI devices on Windows.
 
 ![MIDI Connect banner](Assets/MIDI-Connect-banner.png)
 
-MIDI Connect lives in you Windows taskbar tray. Select the device which you want to connect to and, immediately start using it in your favourite creative software.
+MIDI Connect lives in you Windows taskbar tray. Select the device which you want to connect to and, immediately start using it in your favourite creative software. Done is the times where you had to manually open MIDI ports and manage the connection concurrently within multiple apps.
 
 ![MIDI Connect screenshot](Assets/screenshot.png)
 
