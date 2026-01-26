@@ -1,35 +1,35 @@
 using System;
 using System.Threading.Tasks;
 using TobiasErichsen.teVirtualMIDI;
-using System.Runtime.InteropServices;
+using MinimalWindowsApp.Infrastructure;
 
-namespace MinimalWindowsApp.Managers
+namespace MinimalWindowsApp.Midi
 {
-    public class VirtualMidiPort : IDisposable
+    public class TeVirtualMidiPort : IVirtualMidiPort
     {
         public const uint PARSE_RX = TeVirtualMIDI.TE_VM_FLAGS_PARSE_RX;
         public const uint PARSE_TX = TeVirtualMIDI.TE_VM_FLAGS_PARSE_TX;
         public const uint INSTANTIATE_RX = TeVirtualMIDI.TE_VM_FLAGS_INSTANTIATE_RX_ONLY;
         public const uint INSTANTIATE_TX = TeVirtualMIDI.TE_VM_FLAGS_INSTANTIATE_TX_ONLY;
         public const uint INSTANTIATE_BOTH = TeVirtualMIDI.TE_VM_FLAGS_INSTANTIATE_BOTH;
-        
+
         public const uint MAX_SYSEX_SIZE = 1024;
         public const uint MAX_SYSEX_SIZE_LARGE = 65535;
-        
-        private TeVirtualMIDI _midiPort;
+
+        private TeVirtualMIDI? _midiPort;
         private readonly string _portName;
         private readonly ulong _bluetoothAddress;
-        private Task _receiveTask;
+        private Task? _receiveTask;
         private bool _isReceiving;
         private bool _disposed;
-        
-        public event EventHandler<byte[]> DataReceived;
-        
+
+        public event EventHandler<byte[]>? DataReceived;
+
         public string PortName => _portName;
         public ulong BluetoothAddress => _bluetoothAddress;
         public bool IsOpen => _midiPort != null;
-        
-        static VirtualMidiPort()
+
+        static TeVirtualMidiPort()
         {
             try
             {
@@ -47,13 +47,13 @@ namespace MinimalWindowsApp.Managers
                 Logger.LogDebug($"[TEVIRTUALMIDI STATIC] Exception details: {ex}");
             }
         }
-        
-        public VirtualMidiPort(string deviceName, ulong bluetoothAddress)
+
+        public TeVirtualMidiPort(string deviceName, ulong bluetoothAddress)
         {
             _portName = $"BLE MIDI: {deviceName}";
             _bluetoothAddress = bluetoothAddress;
         }
-        
+
         public bool Create(uint maxSysexLength = MAX_SYSEX_SIZE, uint flags = INSTANTIATE_BOTH)
         {
             try
@@ -71,7 +71,7 @@ namespace MinimalWindowsApp.Managers
                     }
                     _midiPort = null;
                 }
-                
+
                 Logger.Info($"Creating virtual MIDI port '{_portName}'");
                 _midiPort = new TeVirtualMIDI(_portName, maxSysexLength, flags);
                 Logger.Info($"Virtual MIDI port '{_portName}' created successfully");
@@ -90,7 +90,7 @@ namespace MinimalWindowsApp.Managers
                 return false;
             }
         }
-        
+
         public void StartReceive()
         {
             if (_midiPort == null)
@@ -98,13 +98,13 @@ namespace MinimalWindowsApp.Managers
                 Logger.Error($"Cannot start receiving: MIDI port not created");
                 return;
             }
-            
+
             if (_isReceiving)
             {
                 Logger.Warning($"Receive task already running for port '{_portName}'");
                 return;
             }
-            
+
             try
             {
                 Logger.Info($"Starting receive task for port '{_portName}'");
@@ -136,7 +136,7 @@ namespace MinimalWindowsApp.Managers
                             Logger.Error($"Unexpected error in receive loop for port '{_portName}': {ex.Message}");
                             Logger.LogDebug($"Exception details: {ex}");
                         }
-                        
+
                         await Task.Delay(10);
                     }
                     Logger.Info($"Receive task stopped for port '{_portName}'");
@@ -148,12 +148,12 @@ namespace MinimalWindowsApp.Managers
                 Logger.LogDebug($"Exception details: {ex}");
             }
         }
-        
+
         public void SetDataReceivedCallback(Action<byte[]> callback)
         {
             DataReceived += (sender, data) => callback(data);
         }
-        
+
         public bool SendData(byte[] data)
         {
             if (_midiPort == null)
@@ -161,7 +161,7 @@ namespace MinimalWindowsApp.Managers
                 Logger.Error($"Cannot send data: MIDI port not created for '{_portName}'");
                 return false;
             }
-            
+
             try
             {
                 Logger.Info($"VirtualMidiPort.SendData() called - Port: '{_portName}', Data: {BitConverter.ToString(data)} ({data.Length} bytes)");
@@ -182,20 +182,20 @@ namespace MinimalWindowsApp.Managers
                 return false;
             }
         }
-        
+
         public void Close()
         {
             try
             {
                 Logger.Info($"VirtualMidiPort.Close() called for port '{_portName}'");
-                
+
                 if (_isReceiving)
                 {
                     Logger.Info($"Stopping receive task for port '{_portName}'");
                     _isReceiving = false;
                     _receiveTask?.Wait(TimeSpan.FromSeconds(2));
                 }
-                
+
                 if (_midiPort != null)
                 {
                     Logger.Info($"Closing virtual MIDI port '{_portName}'");
@@ -223,7 +223,7 @@ namespace MinimalWindowsApp.Managers
                 _midiPort = null;
             }
         }
-        
+
         private void StopReceiving()
         {
             if (_isReceiving)
@@ -232,7 +232,7 @@ namespace MinimalWindowsApp.Managers
                 _isReceiving = false;
             }
         }
-        
+
         public void Dispose()
         {
             if (!_disposed)

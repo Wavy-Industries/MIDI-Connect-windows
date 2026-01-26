@@ -1,14 +1,16 @@
 using System;
 using System.Windows;
 using System.Windows.Input;
-using MinimalWindowsApp.Managers;
+using MinimalWindowsApp.Infrastructure;
+using MinimalWindowsApp.Services;
+using MinimalWindowsApp.ViewModels;
 
-namespace MinimalWindowsApp
+namespace MinimalWindowsApp.Views
 {
     public partial class MainWindow : Window
     {
         private MainViewModel? _viewModel;
-        
+
         public MainWindow()
         {
             InitializeComponent();
@@ -40,9 +42,9 @@ namespace MinimalWindowsApp
             base.OnPreviewKeyDown(e);
         }
 
-        private void ListBoxItem_PreviewMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        private void ListBoxItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (sender is System.Windows.Controls.ListBoxItem item && item.DataContext is BluetoothDeviceInfo device)
+            if (sender is System.Windows.Controls.ListBoxItem item && item.DataContext is DeviceSession device)
             {
                 Logger.Info($"Click detected: {device.Name}");
                 var isConnected = _viewModel?.ConnectedDevices.Contains(device) ?? false;

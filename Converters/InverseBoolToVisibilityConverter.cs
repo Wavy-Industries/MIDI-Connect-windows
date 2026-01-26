@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace MinimalWindowsApp
+namespace MinimalWindowsApp.Converters
 {
     public class InverseBoolToVisibilityConverter : IValueConverter
     {
