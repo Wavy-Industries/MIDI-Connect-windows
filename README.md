@@ -6,6 +6,11 @@ Let's finally make it simple to connect Bluetooth MIDI devices on Windows.
 
 MIDI Connect lives in you Windows taskbar tray. Select the device which you want to connect to and, immediately start using it in your favourite creative software.
 
+![MIDI Connect screenshot](Assets/screenshot.png)
+
+## Download
+[Download it from the Wavy Industries website](https://wavyindustries.com/MIDI-connect/)
+
 ## Dev
 MIDI Connect is build in the `.NET` framework. To build and run,
 ```dotnet
